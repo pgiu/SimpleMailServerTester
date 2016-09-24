@@ -18,6 +18,7 @@
 #include <iostream>
 
 #include "ConnectionInfo.h"
+#include "BufferedSocketReader.h"
 
 #define PORT "3490"  // the port users will be connecting to
 
@@ -43,8 +44,8 @@
 #define IN_QUIT "QUIT"
 
 // Protoypes
-int dealWithClient(int fd, ConnectionInfo& conn);
-int sendAndExpect(int fd, ConnectionInfo& conn, char* exp_input, char* reply);
+int dealWithClient(int fd);
+int sendAndExpectResult(int fd, BufferedSocketReader& bsr, char* exp_input, char* reply);
 
 using namespace std;
 
@@ -78,45 +79,39 @@ void *get_in_addr(struct sockaddr *sa) {
  * @param buffer_length
  * @return 
  */
-string recvLine(int fd, ConnectionInfo& conn) {
+string recvLine(int fd, BufferedSocketReader& bsr) {
 
-	int n = conn.getIndex();
+	char localbuffer[MAX_BUFFER_SIZE];
+	int n = 0;
 
 	string ret;
 	bool done = false;
 	cout << "Entering recvline" << endl;
+	char c;
 
 	while (!done) {
-		int size = recv(fd, conn.getBuffer() + n, conn.getBufferSize() - n, 0);
-		// TODO important: I still have to figure out how to deal with this buffer.
-		// It will be good to have a variable inside ConnectionInfo were size is saved.
-		// if that variable is equal to zero just call recv. But if that is not 
-		// zero it means that the last time we left with bytes still waiting to 
-		// be processed. 
-		// Problem is that we should deal with a circular buffer. Maybe we can
-		// use a temporary buffer to receive. And then copy the remaining bytes to
-		// the general buffer.
-		if (size == 0) {
+
+		int size = bsr.readOneByte(&c);
+
+		if (bsr.isConnectionClosedByRemoteHost()) {
 			cout << "Comm closed by remote host" << endl;
 			return "";
-		} else if (size == -1) {
+		} else if (bsr.isError()) {
 			perror("receive");
 			return "";
 		} else {
-			cout << "Received " << size << " bytes, " << "n=" << n << ", size=" << size << endl;
 
-			for (int k = n; k < (n + size) && !done; k++) {
-				cout << conn.getBuffer()[k];
-				if (conn.getBuffer()[k] == '\n') {
-					cout << "done" << endl;
-					ret = string(conn.getBuffer(), k);
-					conn.setIndex(k);
-					done = true;
-				}
+			if (c == '\n') {
+				cout << "DONE: New line received" << endl;
+				ret = string(localbuffer, n);
+				done = true;
+			} else {
+				cout << "Received byte:" << c << ", size=" << size << ", n=" << n << endl;
+				localbuffer[n] = c;
 			}
 		}
-		// we increase our index to the right
-		n += size;
+		// increment the number of characters in the string
+		n++;
 	}
 	cout << "leaving recvline. Result:" << ret << endl;
 	return ret;
@@ -206,8 +201,7 @@ int main(void) {
 
 		if (!fork()) { // this is the child process
 
-			ConnectionInfo ci;
-			dealWithClient(new_fd, ci);
+			dealWithClient(new_fd);
 
 		}
 		close(new_fd); // parent doesn't need this
@@ -224,64 +218,72 @@ int main(void) {
  * @param conn
  * @return 
  */
-int dealWithClient(int fd, ConnectionInfo& conn) {
+int dealWithClient(int fd) {
 
 	string reply;
+	BufferedSocketReader bsr(fd);
 
 	// Let's greet our new host
 	send(fd, WELCOME_MESSAGE, strlen(WELCOME_MESSAGE), 0);
 
 
 	// 1) wait for HELO
-	if (sendAndExpect(fd, conn, IN_HELO, OUT_HELO) != 0) {
+	if (sendAndExpectResult(fd, bsr, IN_HELO, OUT_HELO) != 0) {
 		return -1;
 	}
 
 	// 2) wait for FROM
-	if (sendAndExpect(fd, conn, IN_FROM, OUT_FROM) != 0) {
+	if (sendAndExpectResult(fd, bsr, IN_FROM, OUT_FROM) != 0) {
 		return -1;
 	}
 
 	// 3) wait for RCPT
-	if (sendAndExpect(fd, conn, IN_RCPT, OUT_RCPT) != 0) {
+	if (sendAndExpectResult(fd, bsr, IN_RCPT, OUT_RCPT) != 0) {
 		return -1;
 	}
 
 	// 4) wait for DATA
-	if (sendAndExpect(fd, conn, IN_DATA, OUT_DATA) != 0) {
+	if (sendAndExpectResult(fd, bsr, IN_DATA, OUT_DATA) != 0) {
 		return -1;
 	}
 
 	// Wait for a line with a dot...
 	cout << "Waiting for: " << "." << endl;
 	// Read a line 
-	string rec = recvLine(fd, conn);
-	while (rec.compare(".") == 0) {
-		cout << "Line received: " << rec << endl;
-	}
-	send(fd, MESSAGE_ACCEPTED_FOR_DELIVERY, strlen(MESSAGE_ACCEPTED_FOR_DELIVERY), 0);
+	string rec;
+	do {
+		string rec = recvLine(fd, bsr);
+		cout << "Line received:" << rec << endl;
+	} while (!bsr.isConnectionClosedByRemoteHost() && rec.compare(".") != 0);
 
+	if (bsr.isConnectionClosedByRemoteHost()) {
+		cout << "connection closed by remote host" << endl;
+		return -1;
+	} else {
+		cout << "End of email detected" << endl;
+		send(fd, MESSAGE_ACCEPTED_FOR_DELIVERY, strlen(MESSAGE_ACCEPTED_FOR_DELIVERY), 0);
+	}
 
 	// 5) wait for QUIT
-	if (sendAndExpect(fd, conn, IN_QUIT, OUT_QUIT) != 0) {
+	if (sendAndExpectResult(fd, bsr, IN_QUIT, OUT_QUIT) != 0) {
 		return -1;
 	}
 	close(fd);
 	exit(0);
 }
 
-int sendAndExpect(int fd, ConnectionInfo& conn, char* exp_input, char* reply) {
+int sendAndExpectResult(int fd, BufferedSocketReader& bsr, char* exp_input, char* reply) {
 
 	cout << "Waiting for: " << exp_input << endl;
 
 	// Read a line 
-	string rec = recvLine(fd, conn);
+	string rec = recvLine(fd, bsr);
 
 	if (rec.compare(exp_input) == 0) {
 		send(fd, reply, strlen(reply), 0);
 	} else {
-		cout << "Didn't receiv expected input (" << exp_input << ")" << endl;
-		cout << "Instead, received: " << reply;
+		cout << "Didn't receive expected input (" << exp_input << ")" << endl;
+		cout << "Instead, received:" << rec << ", size=" << rec.length() << endl;
 		close(fd);
 		return -1;
 	}

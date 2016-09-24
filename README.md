@@ -29,7 +29,7 @@ You can also run netcat and input the values line by line:
 
 	nc -v localhost 3490 
 
-Please keep in mind that the port my change. Just see the definition of the PORT
+Please keep in mind that the port may change. Just see the definition of the PORT
 variable in main.ccp
 
 

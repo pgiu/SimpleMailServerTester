@@ -15,26 +15,35 @@ public:
 	ConnectionInfo(const ConnectionInfo& orig);
 	virtual ~ConnectionInfo();
 
-	char* getBuffer() {
-		return buffer;
-	}
+	
+	
 
 	int getBufferSize() {
 		return MAX_BUFFER_SIZE;
 	}
 
-	int getIndex() {
-		return index;
+	int getLastRead() {
+		return lastRead;
 	}
 
-	void setIndex(int in) {
-		index = in;
+	void setLastRead(int in) {
+		this->lastRead = in;
 	}
+	
+	int getSize() const {
+		return size;
+	}
+
+	void setSize(int size) {
+		this->size = size;
+	}
+
 private:
 	char buffer[MAX_BUFFER_SIZE];
 	// This is the index to the next valid character to read. 
 	// It starts from -1 and goes up to MAX_BUFFER_SIZE
-	char index;
+	int lastRead;
+	int size;
 };
 
 #endif	/* CONNECTIONINFO_H */
