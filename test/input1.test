@@ -1,0 +1,10 @@
+local.usc.edu
+FROM: validuser@email.com
+TO: valid@email.com
+DATA
+This is the content of the email. No subject is added. 
+And it can be as long as you want. 
+As long as you just finish with a dot in an empty line.
+.
+QUIT
+
