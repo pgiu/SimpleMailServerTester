@@ -32,13 +32,13 @@
 #define OUT_FROM "250 2.1.0 Sender ok\n\r"
 #define OUT_RCPT "250 2.1.5 Recipient ok\n\r"
 #define OUT_DATA "354 Enter mail, end with \".\" on a line by itself\r\n"
-#define OUT_QUIT "221 2.0.0 mx0b-00164701.email.com Closing connection\r\n"
 #define MESSAGE_ACCEPTED_FOR_DELIVERY "250 2.0.0 25uc3w81mk-1 Message accepted for delivery\n\r"
+#define OUT_QUIT "221 2.0.0 mx0b-00164701.email.com Closing connection\r\n"
 
 // Client -> Server 
 #define IN_HELO "HELO local.mail.com"
-#define IN_FROM "MAIL FROM: validuser@email.com"
-#define IN_RCPT "RCPT TO: valid@email.com"
+#define IN_FROM "MAIL FROM: validuser@mail.com"
+#define IN_RCPT "RCPT TO: valid@mail.com"
 #define IN_DATA "DATA"
 #define IN_QUIT "QUIT"
 
@@ -80,16 +80,23 @@ void *get_in_addr(struct sockaddr *sa) {
  */
 string recvLine(int fd, ConnectionInfo& conn) {
 
-	int n = 0;
+	int n = conn.getIndex();
 
 	string ret;
 	bool done = false;
-	cout << "Estoy en recvline" << endl;
+	cout << "Entering recvline" << endl;
 
 	while (!done) {
-		int size = recv(fd, conn.getBuffer() + n, BUFFER_SIZE - n, 0);
-
-		if (size == 0){
+		int size = recv(fd, conn.getBuffer() + n, conn.getBufferSize() - n, 0);
+		// TODO important: I still have to figure out how to deal with this buffer.
+		// It will be good to have a variable inside ConnectionInfo were size is saved.
+		// if that variable is equal to zero just call recv. But if that is not 
+		// zero it means that the last time we left with bytes still waiting to 
+		// be processed. 
+		// Problem is that we should deal with a circular buffer. Maybe we can
+		// use a temporary buffer to receive. And then copy the remaining bytes to
+		// the general buffer.
+		if (size == 0) {
 			cout << "Comm closed by remote host" << endl;
 			return "";
 		} else if (size == -1) {
@@ -98,7 +105,7 @@ string recvLine(int fd, ConnectionInfo& conn) {
 		} else {
 			cout << "Received " << size << " bytes, " << "n=" << n << ", size=" << size << endl;
 
-			for (int k = n; k < (n + size); k++) {
+			for (int k = n; k < (n + size) && !done; k++) {
 				cout << conn.getBuffer()[k];
 				if (conn.getBuffer()[k] == '\n') {
 					cout << "done" << endl;
@@ -107,12 +114,11 @@ string recvLine(int fd, ConnectionInfo& conn) {
 					done = true;
 				}
 			}
-			cout << endl;
 		}
 		// we increase our index to the right
 		n += size;
 	}
-	cout << "time to go! result: " << ret << endl;
+	cout << "leaving recvline. Result:" << ret << endl;
 	return ret;
 }
 
@@ -245,9 +251,16 @@ int dealWithClient(int fd, ConnectionInfo& conn) {
 	if (sendAndExpect(fd, conn, IN_DATA, OUT_DATA) != 0) {
 		return -1;
 	}
-	
+
 	// Wait for a line with a dot...
-	
+	cout << "Waiting for: " << "." << endl;
+	// Read a line 
+	string rec = recvLine(fd, conn);
+	while (rec.compare(".") == 0) {
+		cout << "Line received: " << rec << endl;
+	}
+	send(fd, MESSAGE_ACCEPTED_FOR_DELIVERY, strlen(MESSAGE_ACCEPTED_FOR_DELIVERY), 0);
+
 
 	// 5) wait for QUIT
 	if (sendAndExpect(fd, conn, IN_QUIT, OUT_QUIT) != 0) {
@@ -267,7 +280,7 @@ int sendAndExpect(int fd, ConnectionInfo& conn, char* exp_input, char* reply) {
 	if (rec.compare(exp_input) == 0) {
 		send(fd, reply, strlen(reply), 0);
 	} else {
-		cout << "Not received expected input (" << exp_input << ")" << endl;
+		cout << "Didn't receiv expected input (" << exp_input << ")" << endl;
 		cout << "Instead, received: " << reply;
 		close(fd);
 		return -1;

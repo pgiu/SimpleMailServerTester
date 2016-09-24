@@ -1,6 +1,6 @@
-local.usc.edu
-FROM: validuser@email.com
-TO: valid@email.com
+HELO local.mail.com
+MAIL FROM: validuser@mail.com
+RCPT TO: valid@mail.com
 DATA
 This is the content of the email. No subject is added. 
 And it can be as long as you want. 

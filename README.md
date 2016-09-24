@@ -5,15 +5,36 @@ Pablo Giudice
 
 
 The aim of this project is to simulate a very simple and linear mail server. 
-All the strings are hardcoded and the input is validated against this values. 
+All the strings are hard-coded and the input is validated against this values. 
 
 The goal is to use this as a testing tool for the simple SMTP client. 
 
-# How to build 
+## How to build 
 
-# How to run 
+Just type `make` in your project's root folder.
+	
+## How to test
 
-# Expected sequence 
+To test this program, there are a series of files with both valid and invalid inputs
+under the directory `test`. 
+Before starting the tests, run the server: 
+	
+	./dist/Debug/GNU-Linux-x86/mailserver
+
+And open a different terminal and use netcat to send the content of the file. 
+
+	nc -v localhost 3490 < test/input1.test
+
+You can also run netcat and input the values line by line: 
+
+	nc -v localhost 3490 
+
+Please keep in mind that the port my change. Just see the definition of the PORT
+variable in main.ccp
+
+
+
+## Expected sequence 
 
 	SRV: Escape character is '^]'.
 	SRV: 220 mx0b-00164701.pphosted.com ESMTP cm-m0046761

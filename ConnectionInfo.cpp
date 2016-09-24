@@ -8,6 +8,7 @@
 #include "ConnectionInfo.h"
 
 ConnectionInfo::ConnectionInfo() {
+	index = 0;
 }
 
 ConnectionInfo::ConnectionInfo(const ConnectionInfo& orig) {
